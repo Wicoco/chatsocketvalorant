@@ -1,35 +1,17 @@
-"""Thème visuel façon Valorant pour le terminal client (ANSI escape codes)."""
+"""Couleurs ANSI simples pour le terminal client."""
 
 import time
 
+RESET = "\033[0m"
+BOLD = "\033[1m"
+GRAY = "\033[90m"
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+WHITE = "\033[97m"
 
-class C:
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    RED = "\033[38;5;203m"       # rouge Valorant
-    DARKRED = "\033[38;5;124m"
-    WHITE = "\033[97m"
-    GRAY = "\033[38;5;245m"
-    CYAN = "\033[38;5;80m"       # modérateur
-    GOLD = "\033[38;5;220m"      # admin
-    GREEN = "\033[38;5;83m"      # succès / connecté
-    PURPLE = "\033[38;5;141m"    # message privé
-
-
-BANNER = f"""{C.RED}{C.BOLD}
-██╗   ██╗ █████╗ ██╗      ██████╗ ██████╗  █████╗ ███╗   ██╗████████╗
-██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗████╗  ██║╚══██╔══╝
-██║   ██║███████║██║     ██║   ██║██████╔╝███████║██╔██╗ ██║   ██║
-╚██╗ ██╔╝██╔══██║██║     ██║   ██║██╔══██╗██╔══██║██║╚██╗██║   ██║
- ╚████╔╝ ██║  ██║███████╗╚██████╔╝██║  ██║██║  ██║██║ ╚████║   ██║
-  ╚═══╝  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝
-{C.RESET}{C.WHITE}{C.BOLD}          T A C T I C A L   C H A T   P R O T O C O L{C.RESET}
-{C.GRAY}------------------------------------------------------------------{C.RESET}
-"""
-
-ROLE_COLORS = {"admin": C.GOLD, "moderator": C.CYAN, "user": C.WHITE}
-ROLE_TAGS = {"admin": "ADMIN", "moderator": "MODO", "user": "AGENT"}
+ROLE_COLORS = {"admin": YELLOW, "moderator": CYAN, "user": WHITE}
 
 
 def now_str():
@@ -37,53 +19,42 @@ def now_str():
 
 
 def role_color(role):
-    return ROLE_COLORS.get(role, C.WHITE)
+    return ROLE_COLORS.get(role, WHITE)
 
 
-def role_tag(role):
-    return ROLE_TAGS.get(role, "AGENT")
+def fmt_chat(username, role, text, room):
+    return (f"{GRAY}[{now_str()}]{RESET} #{room} "
+            f"{role_color(role)}{BOLD}{username}{RESET} > {text}")
 
 
-def fmt_chat(username, role, text, room, ts=None):
-    ts = ts or now_str()
-    rc = role_color(role)
-    return (f"{C.GRAY}[{ts}]{C.RESET} {C.DIM}#{room}{C.RESET} "
-            f"{rc}{C.BOLD}[{role_tag(role)}] {username}{C.RESET} {C.WHITE}> {text}{C.RESET}")
+def fmt_private_in(username, role, text):
+    return (f"{GRAY}[{now_str()}]{RESET} {role_color(role)}(privé) {username}{RESET} "
+            f"> {text}")
 
 
-def fmt_private_in(username, role, text, ts=None):
-    ts = ts or now_str()
-    rc = role_color(role)
-    return (f"{C.GRAY}[{ts}]{C.RESET} {C.PURPLE}{C.BOLD}[MSG PRIVÉ]{C.RESET} "
-            f"{rc}{username}{C.RESET} {C.PURPLE}chuchote>{C.RESET} {C.WHITE}{text}{C.RESET}")
-
-
-def fmt_private_out(target, text, ts=None):
-    ts = ts or now_str()
-    return (f"{C.GRAY}[{ts}]{C.RESET} {C.PURPLE}{C.BOLD}[MSG PRIVÉ]{C.RESET} "
-            f"{C.PURPLE}vous -> {target}{C.RESET} {C.WHITE}{text}{C.RESET}")
+def fmt_private_out(target, text):
+    return f"{GRAY}[{now_str()}]{RESET} (privé) vous -> {target} > {text}"
 
 
 def fmt_system(text):
-    return f"{C.GOLD}{C.BOLD}[SYSTEM]{C.RESET} {C.WHITE}{text}{C.RESET}"
+    return f"{YELLOW}[INFO]{RESET} {text}"
 
 
 def fmt_error(text):
-    return f"{C.RED}{C.BOLD}[SPIKE ERROR]{C.RESET} {C.RED}{text}{C.RESET}"
+    return f"{RED}[ERREUR]{RESET} {text}"
 
 
 def fmt_success(text):
-    return f"{C.GREEN}{C.BOLD}[DEFUSED]{C.RESET} {C.GREEN}{text}{C.RESET}"
+    return f"{GREEN}[OK]{RESET} {text}"
 
 
 def fmt_join(username):
-    return f"{C.GREEN}>> {username} a rejoint la partie.{C.RESET}"
+    return f"{GREEN}>> {username} a rejoint.{RESET}"
 
 
 def fmt_leave(username):
-    return f"{C.DARKRED}<< {username} a quitté la partie.{C.RESET}"
+    return f"{GRAY}<< {username} est parti.{RESET}"
 
 
 def prompt(username, role):
-    rc = role_color(role)
-    return f"{rc}{C.BOLD}[{role_tag(role)}] {username}{C.RESET} {C.WHITE}> {C.RESET}"
+    return f"{role_color(role)}{BOLD}{username}{RESET} > "

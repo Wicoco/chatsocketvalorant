@@ -6,7 +6,7 @@ import sys
 
 from protocol import send_json, SocketReader
 import theme
-from theme import C
+from theme import RESET, BOLD, WHITE
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 5000
@@ -88,27 +88,27 @@ def receiver_loop(sock):
             reprint_line(theme.fmt_success(f"Connecté en tant que {msg['username']} ({msg['role']})"))
 
         elif mtype == "kicked":
-            reprint_line(theme.fmt_error(f"ELIMINATED : {msg['reason']}"))
+            reprint_line(theme.fmt_error(f"Kick : {msg['reason']}"))
             state["running"] = False
 
         elif mtype == "banned":
-            reprint_line(theme.fmt_error(f"BANNI : {msg['reason']}"))
+            reprint_line(theme.fmt_error(f"Banni : {msg['reason']}"))
             state["running"] = False
 
 
-HELP_TEXT = f"""{C.GOLD}{C.BOLD}=== COMMANDES DISPONIBLES ==={C.RESET}
-{C.WHITE}/nick <pseudo>{C.RESET}            changer de pseudo
-{C.WHITE}/msg <pseudo> <texte>{C.RESET}     message privé
-{C.WHITE}/time{C.RESET}                     heure du serveur
-{C.WHITE}/ping{C.RESET}                     latence
-{C.WHITE}/clear{C.RESET}                    nettoyer l'écran
-{C.WHITE}/join <salon>{C.RESET}             rejoindre / créer un salon
-{C.WHITE}/leave{C.RESET}                    revenir au salon principal
-{C.WHITE}/rooms{C.RESET}                    lister les salons
-{C.WHITE}/who{C.RESET}                      lister les joueurs du salon
-{C.CYAN}/kick /mute /unmute <pseudo>{C.RESET}   (modérateur+)
-{C.GOLD}/ban /setmodo /setadmin /remmodo /remadmin <pseudo>{C.RESET}  (admin)
-{C.WHITE}/quit{C.RESET}                     quitter la partie
+HELP_TEXT = f"""{BOLD}=== COMMANDES DISPONIBLES ==={RESET}
+/nick <pseudo>            changer de pseudo
+/msg <pseudo> <texte>      message privé
+/time                      heure du serveur
+/ping                      latence
+/clear                     nettoyer l'écran
+/join <salon>              rejoindre / créer un salon
+/leave                     revenir au salon principal
+/rooms                     lister les salons
+/who                       lister les membres du salon
+/kick /mute /unmute <pseudo>   (modérateur+)
+/ban /setmodo /setadmin /remmodo /remadmin <pseudo>  (admin)
+/quit                      quitter
 """
 
 
@@ -118,11 +118,11 @@ def send_command(sock, cmd, args):
 
 def main():
     clear_screen()
-    print(theme.BANNER)
+    print(f"{BOLD}=== Chat Textuel (sockets) ==={RESET}\n")
 
     username = ""
     while not username:
-        username = input(f"{C.WHITE}> Choisissez votre agent (pseudo) : {C.RESET}").strip()
+        username = input(f"{WHITE}Choisissez votre pseudo : {RESET}").strip()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -153,7 +153,6 @@ def main():
 
             elif text == "/clear":
                 clear_screen()
-                print(theme.BANNER)
                 continue
 
             elif text == "/help":
@@ -179,7 +178,7 @@ def main():
         except OSError:
             pass
         sock.close()
-        print(f"\n{C.RED}{C.BOLD}>> GG WP. Fin de la partie.{C.RESET}")
+        print(f"\n{BOLD}Fin de la session.{RESET}")
 
 
 if __name__ == "__main__":

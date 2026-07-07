@@ -1,4 +1,4 @@
-# Chat Textuel Sockets — Thème Valorant
+# Chat Textuel Sockets
 
 Projet basé sur le code vu en cours (thread par client, JSON persistant), étendu pour couvrir
 l'intégralité des consignes.
@@ -6,25 +6,103 @@ l'intégralité des consignes.
 ## Fichiers
 
 - `protocol.py` — framing des messages (JSON, un message par ligne) partagé client/serveur.
-- `theme.py` — couleurs ANSI et bannière façon Valorant pour le terminal client.
+- `theme.py` — couleurs ANSI pour le terminal client.
 - `server.py` — serveur multi-clients (threading), rooms, rôles, modération.
 - `client.py` — client avec thread de réception asynchrone + boucle de saisie.
 
 Aucune dépendance externe : uniquement la bibliothèque standard Python 3.
 
-## Lancer le projet
+## Tutoriel : lancer et utiliser le projet
 
-Dans deux terminaux VSCode séparés (même dossier) :
+### 1. Prérequis
+
+Python 3 (aucune dépendance externe, uniquement la bibliothèque standard). Tous les fichiers
+(`server.py`, `client.py`, `protocol.py`, `theme.py`) doivent rester dans le même dossier.
+
+### 2. Démarrer le serveur
+
+Ouvrez un terminal dans le dossier du projet :
 
 ```bash
 python3 server.py
 ```
 
+Le serveur affiche l'adresse et le port sur lesquels il écoute, puis attend des connexions :
+
+```
+[SERVER] Serveur lancé sur ('192.168.x.x', 5000)
+[SERVER] En attente de connexions...
+```
+
+Laissez ce terminal ouvert : c'est le processus serveur, il doit rester actif tant que le chat
+doit fonctionner. Un fichier `user_data.json` sera créé automatiquement à côté pour stocker les
+pseudos, rôles et bans.
+
+### 3. Connecter un ou plusieurs clients
+
+Dans un **nouveau** terminal (le serveur doit déjà tourner) :
+
 ```bash
 python3 client.py
 ```
 
-Ouvrez plusieurs terminaux `client.py` pour simuler plusieurs joueurs.
+Le client demande un pseudo (3-16 caractères, lettres/chiffres/`_`/`-`) :
+
+```
+Choisissez votre pseudo : alice
+[OK] Connecté en tant que alice (admin)
+```
+
+Le tout premier compte créé sur le serveur devient automatiquement `admin`. Les suivants sont
+`user` par défaut.
+
+Répétez l'opération (`python3 client.py` dans un nouveau terminal) pour simuler plusieurs joueurs
+connectés en même temps, par exemple `bobby` dans un second terminal.
+
+### 4. Discuter
+
+Tapez simplement du texte puis Entrée : le message est diffusé à tous les clients présents dans
+le même salon.
+
+```
+alice > salut tout le monde
+[12:03:41] #general alice > salut tout le monde
+```
+
+### 5. Utiliser les commandes
+
+Toutes les commandes commencent par `/`. Tapez `/help` à tout moment pour voir la liste complète
+dans le client. Quelques exemples pour démarrer :
+
+```
+/nick nouveau_pseudo        change votre pseudo
+/msg bobby coucou            envoie un message privé à bobby
+/time                        affiche l'heure du serveur
+/ping                        mesure la latence
+/join taverne                rejoint (ou crée) le salon "taverne"
+/leave                       revient au salon "general"
+/rooms                       liste les salons existants
+/who                         liste les membres du salon courant
+```
+
+### 6. Modération (rôles moderateur/admin)
+
+Si votre compte a le rôle `moderator` ou `admin` (voir le tableau des commandes ci-dessous),
+vous pouvez gérer les autres utilisateurs :
+
+```
+/kick bobby        déconnecte bobby
+/mute bobby 120     mute bobby pendant 120s
+/ban bobby          bannit bobby définitivement (persisté dans user_data.json)
+/setmodo bobby       promeut bobby modérateur
+```
+
+### 7. Quitter
+
+`/quit` (ou `Ctrl+C`) ferme proprement la connexion du client. Le serveur détecte aussi les
+déconnexions brutales et les timeouts d'inactivité (180s par défaut) sans planter.
+
+Pour arrêter le serveur : `Ctrl+C` dans son terminal.
 
 ## Commandes disponibles côté client
 
@@ -69,22 +147,12 @@ Le tout premier compte créé sur le serveur devient automatiquement `admin` (bo
   chacune vérifiant le niveau minimum requis et interdisant de cibler un rôle égal/supérieur.
 - **Salons (rooms)** : `/join`, `/leave`, `/rooms`, `/who`, avec broadcast d'entrée/sortie.
 - **Sécurité** :
-  - validation stricte des pseudos (regex, longueur, unicité en ligne),
+  - validation des pseudos (longueur, caractères autorisés, unicité en ligne),
   - assainissement des messages (caractères non imprimables filtrés, longueur plafonnée),
-  - anti-flood (5 messages / 5s → mute automatique 30s),
   - vérification du ban à chaque tentative de connexion,
   - verrous (`threading.Lock`) sur les structures partagées et l'écriture du fichier JSON pour
     éviter les races conditions en environnement multi-thread,
   - les messages malformés/types inconnus sont ignorés silencieusement plutôt que de faire
     planter le serveur.
-- **Bonus QoL** : thème Valorant complet (bannière, couleurs par rôle, horodatage des messages,
-  affichage `[SYSTEM]`/`[SPIKE ERROR]`/`[DEFUSED]` stylisé), affichage non bloquant côté client
-  (thread de réception séparé du prompt de saisie).
-
-## Limites connues / pistes d'amélioration
-
-- Le mute n'est pas persisté après redémarrage du serveur (volontaire, c'est une sanction
-  temporaire).
-- Pas de mot de passe : l'identité repose sur le pseudo choisi (cohérent avec le niveau du cours).
-- Le rafraîchissement du prompt pendant la saisie est une solution simple ; un vrai TUI
-  (ex. `curses` ou `rich`) donnerait un rendu plus propre mais dépasse le cadre du cours.
+- **Bonus QoL** : couleurs par rôle, horodatage des messages, affichage `[INFO]`/`[ERREUR]`/`[OK]`,
+  affichage non bloquant côté client (thread de réception séparé du prompt de saisie).

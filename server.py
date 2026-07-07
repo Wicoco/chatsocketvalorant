@@ -3,8 +3,6 @@ import threading
 import os
 import json
 import time
-import re
-from collections import deque
 
 from protocol import send_json, SocketReader
 
@@ -16,21 +14,17 @@ USER_DB_FILE = "user_data.json"
 
 IDLE_CHECK_INTERVAL = 30      # granularité du recv timeout (s)
 MAX_IDLE_TIME = 180           # déconnexion auto après ce temps d'inactivité (s)
-RATE_LIMIT_COUNT = 5          # messages
-RATE_LIMIT_WINDOW = 5         # secondes
-AUTO_MUTE_DURATION = 30       # secondes, en cas de flood
 DEFAULT_MUTE_DURATION = 60
 MAX_MESSAGE_LEN = 500
 DEFAULT_ROOM = "general"
 
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_\-]{3,16}$")
 ROLE_LEVELS = {"user": 0, "moderator": 1, "admin": 2}
 
 # ---- état partagé ----
 clients_lock = threading.Lock()
 json_lock = threading.Lock()
 
-# conn -> {"username","role","room","addr","muted_until","msg_times","last_active"}
+# conn -> {"username","role","room","addr","muted_until","last_active"}
 clients = {}
 # room_name -> set(conn)
 rooms = {DEFAULT_ROOM: set()}
@@ -124,15 +118,18 @@ def sanitize_text(text, max_len=MAX_MESSAGE_LEN):
     return text.strip()[:max_len]
 
 
+def is_valid_username(name):
+    if not (3 <= len(name) <= 16):
+        return False
+    return all(ch.isalnum() or ch in "_-" for ch in name)
+
+
 # ---------------------------------------------------------------------------
 # Commandes
 # ---------------------------------------------------------------------------
 
-def require_level(conn, info, min_level, action):
-    if ROLE_LEVELS.get(info["role"], 0) < min_level:
-        error(conn, f"Permission refusée pour '{action}'. Rôle requis insuffisant.")
-        return False
-    return True
+def has_role(info, min_role):
+    return ROLE_LEVELS[info["role"]] >= ROLE_LEVELS[min_role]
 
 
 def resolve_target(conn, info, username):
@@ -140,7 +137,7 @@ def resolve_target(conn, info, username):
     if target_conn is None:
         error(conn, f"Utilisateur '{username}' introuvable ou hors ligne.")
         return None, None
-    if ROLE_LEVELS.get(target_info["role"], 0) >= ROLE_LEVELS.get(info["role"], 0) and target_conn is not conn:
+    if target_conn is not conn and ROLE_LEVELS[target_info["role"]] >= ROLE_LEVELS[info["role"]]:
         error(conn, "Vous ne pouvez pas cibler un rôle égal ou supérieur au vôtre.")
         return None, None
     return target_conn, target_info
@@ -151,7 +148,7 @@ def cmd_nick(conn, info, args):
         error(conn, "Usage: /nick <nouveau_pseudo>")
         return
     new_name = args[0]
-    if not USERNAME_RE.match(new_name):
+    if not is_valid_username(new_name):
         error(conn, "Pseudo invalide (3-16 caractères, lettres/chiffres/_/-).")
         return
     existing_conn, _ = find_conn_by_username(new_name)
@@ -235,9 +232,11 @@ def cmd_leave(conn, info, args):
 
 
 def cmd_kick(conn, info, args):
-    if not args or not require_level(conn, info, ROLE_LEVELS["moderator"], "kick"):
-        if not args:
-            error(conn, "Usage: /kick <pseudo>")
+    if not has_role(info, "moderator"):
+        error(conn, "Permission refusée.")
+        return
+    if not args:
+        error(conn, "Usage: /kick <pseudo>")
         return
     target_conn, target_info = resolve_target(conn, info, args[0])
     if target_conn is None:
@@ -252,9 +251,11 @@ def cmd_kick(conn, info, args):
 
 
 def cmd_ban(conn, info, args):
-    if not args or not require_level(conn, info, ROLE_LEVELS["admin"], "ban"):
-        if not args:
-            error(conn, "Usage: /ban <pseudo>")
+    if not has_role(info, "admin"):
+        error(conn, "Permission refusée.")
+        return
+    if not args:
+        error(conn, "Usage: /ban <pseudo>")
         return
     target_conn, target_info = resolve_target(conn, info, args[0])
     if target_conn is None:
@@ -270,9 +271,11 @@ def cmd_ban(conn, info, args):
 
 
 def cmd_mute(conn, info, args):
-    if not args or not require_level(conn, info, ROLE_LEVELS["moderator"], "mute"):
-        if not args:
-            error(conn, "Usage: /mute <pseudo> [secondes]")
+    if not has_role(info, "moderator"):
+        error(conn, "Permission refusée.")
+        return
+    if not args:
+        error(conn, "Usage: /mute <pseudo> [secondes]")
         return
     duration = DEFAULT_MUTE_DURATION
     if len(args) > 1 and args[1].isdigit():
@@ -287,9 +290,11 @@ def cmd_mute(conn, info, args):
 
 
 def cmd_unmute(conn, info, args):
-    if not args or not require_level(conn, info, ROLE_LEVELS["moderator"], "unmute"):
-        if not args:
-            error(conn, "Usage: /unmute <pseudo>")
+    if not has_role(info, "moderator"):
+        error(conn, "Permission refusée.")
+        return
+    if not args:
+        error(conn, "Usage: /unmute <pseudo>")
         return
     target_conn, target_info = resolve_target(conn, info, args[0])
     if target_conn is None:
@@ -301,9 +306,11 @@ def cmd_unmute(conn, info, args):
 
 
 def cmd_setrole(conn, info, args, role, label):
-    if not args or not require_level(conn, info, ROLE_LEVELS["admin"], label):
-        if not args:
-            error(conn, f"Usage: /{label} <pseudo>")
+    if not has_role(info, "admin"):
+        error(conn, "Permission refusée.")
+        return
+    if not args:
+        error(conn, f"Usage: /{label} <pseudo>")
         return
     target_conn, target_info = resolve_target(conn, info, args[0])
     if target_conn is None:
@@ -345,7 +352,7 @@ def register_client(conn, addr):
         return None, None, None
 
     username = sanitize_text(msg.get("username", ""), 16)
-    if not USERNAME_RE.match(username):
+    if not is_valid_username(username):
         safe_send(conn, {"type": "error", "text": "Pseudo invalide (3-16 caractères, lettres/chiffres/_/-)."})
         return None, None, None
 
@@ -374,8 +381,7 @@ def handle_client(conn, addr):
 
     info = {
         "username": username, "role": role, "room": DEFAULT_ROOM, "addr": addr,
-        "muted_until": None, "msg_times": deque(maxlen=RATE_LIMIT_COUNT),
-        "last_active": time.time(),
+        "muted_until": None, "last_active": time.time(),
     }
     with clients_lock:
         clients[conn] = info
@@ -426,14 +432,6 @@ def handle_client(conn, addr):
                 if info["muted_until"] and time.time() < info["muted_until"]:
                     remaining = int(info["muted_until"] - time.time())
                     error(conn, f"Vous êtes muted encore {remaining}s.")
-                    continue
-
-                now = time.time()
-                info["msg_times"].append(now)
-                if len(info["msg_times"]) == RATE_LIMIT_COUNT and \
-                        now - info["msg_times"][0] < RATE_LIMIT_WINDOW:
-                    info["muted_until"] = now + AUTO_MUTE_DURATION
-                    error(conn, f"Flood détecté, mute automatique {AUTO_MUTE_DURATION}s.")
                     continue
 
                 text = sanitize_text(msg.get("text", ""))
