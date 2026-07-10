@@ -30,9 +30,7 @@ clients = {}
 rooms = {DEFAULT_ROOM: set()}
 
 
-# ---------------------------------------------------------------------------
 # Persistance des comptes (rôles, bans)
-# ---------------------------------------------------------------------------
 
 def load_users():
     with json_lock:
@@ -77,9 +75,7 @@ def set_user_banned(username, banned=True):
         save_users(users)
 
 
-# ---------------------------------------------------------------------------
 # Helpers réseau
-# ---------------------------------------------------------------------------
 
 def safe_send(conn, payload):
     try:
@@ -124,9 +120,7 @@ def is_valid_username(name):
     return all(ch.isalnum() or ch in "_-" for ch in name)
 
 
-# ---------------------------------------------------------------------------
 # Commandes
-# ---------------------------------------------------------------------------
 
 def has_role(info, min_role):
     return ROLE_LEVELS[info["role"]] >= ROLE_LEVELS[min_role]
@@ -343,9 +337,7 @@ COMMANDS = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Boucle client
-# ---------------------------------------------------------------------------
 
 def register_client(conn, addr):
     reader = SocketReader(conn)

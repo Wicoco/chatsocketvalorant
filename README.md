@@ -62,12 +62,3 @@ Toutes ces commandes sont aussi accessibles depuis les boutons de la barre laté
 (les commandes de modération/administration n'apparaissent que si le rôle du joueur le
 permet). Un joueur ne peut jamais cibler un rôle égal ou supérieur au sien. Pseudos, rôles
 et bans sont stockés dans `user_data.json`.
-
-## Interface graphique
-
-- Écran de connexion : choix de l'adresse du serveur et du pseudo ("agent").
-- Fenêtre de chat : journal de messages coloré par rôle (`AGENT` blanc, `MODÉRATEUR`
-  cyan, `ADMINISTRATEUR` or), champ de saisie, et barre latérale d'actions (salons,
-  pseudo, message privé, heure, ping, modération/administration).
-- Les couleurs et polices viennent de `theme.py` ; pour changer l'habillage, il suffit d'y
-  modifier les constantes de couleur.

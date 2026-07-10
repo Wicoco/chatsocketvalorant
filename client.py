@@ -60,9 +60,7 @@ class ChatClient:
         self.build_login_screen()
         self.root.mainloop()
 
-    # ------------------------------------------------------------------
     # Écran de connexion
-    # ------------------------------------------------------------------
     def build_login_screen(self):
         self.root.geometry("420x340")
         frame = tk.Frame(self.root, bg=theme.BG)
@@ -113,9 +111,7 @@ class ChatClient:
         self.build_chat_screen()
         self.root.after(50, self.process_queue)
 
-    # ------------------------------------------------------------------
     # Réception réseau (tourne dans un thread séparé, ne touche jamais Tkinter)
-    # ------------------------------------------------------------------
     def receive_loop(self):
         while True:
             try:
@@ -137,9 +133,7 @@ class ChatClient:
         if self.connected and self.root.winfo_exists():
             self.root.after(50, self.process_queue)
 
-    # ------------------------------------------------------------------
     # Écran de chat
-    # ------------------------------------------------------------------
     def build_chat_screen(self):
         self.root.geometry("900x580")
         self.root.minsize(700, 450)
@@ -255,9 +249,7 @@ class ChatClient:
         self.room_label.config(text=self.room)
         self.refresh_role_panels()
 
-    # ------------------------------------------------------------------
     # Affichage des messages dans le journal de chat
-    # ------------------------------------------------------------------
     def append_line(self, text, tag=None):
         self.chat_text.configure(state="normal")
         self.chat_text.insert("end", text + "\n", tag or ())
@@ -285,9 +277,7 @@ class ChatClient:
     def append_success(self, text):
         self.append_line(f"[OK] {text}", "success")
 
-    # ------------------------------------------------------------------
     # Traitement des messages reçus du serveur
-    # ------------------------------------------------------------------
     def handle_message(self, msg):
         mtype = msg.get("type")
 
@@ -357,9 +347,7 @@ class ChatClient:
             self.connected = False
             self.entry.config(state="disabled")
 
-    # ------------------------------------------------------------------
     # Envoi vers le serveur
-    # ------------------------------------------------------------------
     def send_command(self, cmd, args):
         send_json(self.sock, {"type": "command", "cmd": cmd, "args": args})
 
@@ -391,9 +379,7 @@ class ChatClient:
 
         send_json(self.sock, {"type": "chat", "text": text})
 
-    # ------------------------------------------------------------------
     # Actions de la barre latérale (ouvrent une boîte de dialogue puis envoient la commande)
-    # ------------------------------------------------------------------
     def action_join_room(self):
         name = simpledialog.askstring("Rejoindre un salon", "Nom du salon :", parent=self.root)
         if name and name.strip():
@@ -463,7 +449,6 @@ class ChatClient:
         if target and target.strip():
             self.send_command(cmd, [target.strip()])
 
-    # ------------------------------------------------------------------
     def quit_app(self):
         self.connected = False
         if self.sock:
