@@ -41,6 +41,30 @@ Administration (admin) :
 /help                           afficher cette aide
 """
 
+# Source unique pour l'auto-complétion : (nom, usage, description, rôle minimum requis)
+COMMANDS_INFO = [
+    ("nickname", "<nouveau_pseudo>", "changer de pseudo", "user"),
+    ("message", "<pseudo> <texte>", "message privé", "user"),
+    ("time", "", "heure du serveur", "user"),
+    ("ping", "", "latence", "user"),
+    ("clear", "", "nettoyer l'écran (local)", "user"),
+    ("join", "<salon>", "rejoindre / créer un salon", "user"),
+    ("leave", "", "revenir au salon principal", "user"),
+    ("rooms", "", "lister les salons", "user"),
+    ("who", "", "lister les membres du salon", "user"),
+    ("kick", "<pseudo>", "expulser un membre", "moderator"),
+    ("mute", "<pseudo> [secondes]", "rendre muet", "moderator"),
+    ("unmute", "<pseudo>", "réautoriser la parole", "moderator"),
+    ("ban", "<pseudo>", "bannir un membre", "admin"),
+    ("set_moderator", "<pseudo>", "nommer modérateur", "admin"),
+    ("remove_moderator", "<pseudo>", "retirer modérateur", "admin"),
+    ("set_administrator", "<pseudo>", "nommer administrateur", "admin"),
+    ("remove_administrator", "<pseudo>", "retirer administrateur", "admin"),
+    ("quit", "", "quitter le chat", "user"),
+    ("help", "", "afficher cette aide", "user"),
+]
+ROLE_LEVEL = {"user": 0, "moderator": 1, "admin": 2}
+
 
 class ChatClient:
     """Fenêtre unique qui bascule entre écran de connexion et écran de chat."""
@@ -55,6 +79,9 @@ class ChatClient:
         self.connected = False
         self.members = {}  # pseudo -> rôle, tenu à jour via /who, join, leave
         self.rooms = {}    # nom du salon -> nombre de membres, tenu à jour via /rooms
+        self.suggest_popup = None   # fenêtre d'auto-complétion des commandes (None si masquée)
+        self.suggest_listbox = None
+        self.suggestions = []       # commandes actuellement proposées dans self.suggest_listbox
 
         self.root = tk.Tk()
         self.root.title(theme.TITLE)
@@ -148,24 +175,36 @@ class ChatClient:
                                       fg=theme.GRAY, bg=theme.BG_PANEL)
         self.status_label.pack(side="right", padx=10)
 
-        body = tk.Frame(self.root, bg=theme.BG)
+        # PanedWindow : la zone de chat et la barre latérale se redimensionnent
+        # fluidement avec la fenêtre (et la séparation reste ajustable à la souris).
+        body = tk.PanedWindow(self.root, orient="horizontal", bg=theme.BG,
+                               sashwidth=6, sashrelief="flat", bd=0)
         body.pack(fill="both", expand=True)
 
-        self.chat_text = tk.Text(body, bg=theme.BG, fg=theme.WHITE, font=theme.FONT_TEXT,
+        chat_frame = tk.Frame(body, bg=theme.BG)
+        self.chat_text = tk.Text(chat_frame, bg=theme.BG, fg=theme.WHITE, font=theme.FONT_TEXT,
                                   state="disabled", wrap="word", relief="flat")
         self.chat_text.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=10)
         self._configure_tags()
+        body.add(chat_frame, minsize=300, stretch="always")
 
-        self.sidebar = tk.Frame(body, bg=theme.BG_PANEL, width=230)
-        self.sidebar.pack(side="right", fill="y", padx=(5, 10), pady=10)
+        sidebar_frame = tk.Frame(body, bg=theme.BG)
+        self.sidebar = tk.Frame(sidebar_frame, bg=theme.BG_PANEL)
+        self.sidebar.pack(fill="both", expand=True, padx=(5, 10), pady=10)
         self.build_sidebar()
+        body.add(sidebar_frame, width=230, minsize=200, stretch="never")
 
         entry_frame = tk.Frame(self.root, bg=theme.BG)
         entry_frame.pack(fill="x", padx=10, pady=(0, 10))
         self.entry = tk.Entry(entry_frame, bg=theme.BG_INPUT, fg=theme.WHITE, insertbackground=theme.WHITE,
                                font=theme.FONT_TEXT, relief="flat")
         self.entry.pack(side="left", fill="x", expand=True, ipady=6)
-        self.entry.bind("<Return>", lambda e: self.send_entry())
+        self.entry.bind("<Return>", self.on_entry_return)
+        self.entry.bind("<KeyRelease>", self.on_entry_key)
+        self.entry.bind("<Down>", self.on_entry_down)
+        self.entry.bind("<Up>", self.on_entry_up)
+        self.entry.bind("<Tab>", self.on_entry_tab)
+        self.entry.bind("<Escape>", self.on_entry_escape)
         self.entry.focus()
         tk.Button(entry_frame, text="ENVOYER", command=self.send_entry, bg=theme.RED, fg=theme.WHITE,
                   font=theme.FONT_BOLD, relief="flat").pack(side="left", padx=(6, 0))
@@ -357,6 +396,126 @@ class ChatClient:
             self.connected = False
             self.entry.config(state="disabled")
 
+    # Auto-complétion des commandes (déclenchée en tapant "/")
+    def visible_commands(self):
+        level = ROLE_LEVEL.get(self.role, 0)
+        return [c for c in COMMANDS_INFO if ROLE_LEVEL.get(c[3], 0) <= level]
+
+    def suggestions_visible(self):
+        return self.suggest_popup is not None and self.suggest_popup.winfo_exists()
+
+    def on_entry_key(self, event):
+        if event.keysym in ("Up", "Down", "Return", "Tab", "Escape"):
+            return
+        text = self.entry.get()
+        if not text.startswith("/") or " " in text:
+            self.hide_suggestions()
+            return
+        prefix = text[1:].lower()
+        matches = [c for c in self.visible_commands() if c[0].startswith(prefix)]
+        if matches:
+            self.show_suggestions(matches)
+        else:
+            self.hide_suggestions()
+
+    def show_suggestions(self, matches):
+        self.suggestions = matches
+        if not self.suggestions_visible():
+            self.suggest_popup = tk.Toplevel(self.root)
+            self.suggest_popup.overrideredirect(True)
+            self.suggest_popup.configure(bg=theme.RED)
+            self.suggest_listbox = tk.Listbox(self.suggest_popup, bg=theme.BG_INPUT, fg=theme.WHITE,
+                                               selectbackground=theme.RED, activestyle="none",
+                                               exportselection=False, relief="flat", bd=0,
+                                               highlightthickness=0, font=theme.FONT_TEXT)
+            self.suggest_listbox.pack(padx=1, pady=1, fill="both", expand=True)
+            self.suggest_listbox.bind("<Button-1>", self.on_suggest_click)
+
+        self.suggest_listbox.delete(0, "end")
+        for cmd, usage, desc, _role in matches:
+            label = f"/{cmd} {usage}".rstrip() + f"  —  {desc}"
+            self.suggest_listbox.insert("end", label)
+        self.suggest_listbox.config(height=min(6, len(matches)))
+        self.suggest_listbox.selection_clear(0, "end")
+        self.suggest_listbox.selection_set(0)
+        self.suggest_listbox.activate(0)
+
+        x = self.entry.winfo_rootx()
+        y = self.entry.winfo_rooty() + self.entry.winfo_height()
+        width = self.entry.winfo_width()
+        self.suggest_popup.update_idletasks()
+        height = self.suggest_listbox.winfo_reqheight() + 2
+        self.suggest_popup.geometry(f"{width}x{height}+{x}+{y}")
+        self.suggest_popup.lift()
+
+    def hide_suggestions(self):
+        if self.suggestions_visible():
+            self.suggest_popup.destroy()
+        self.suggest_popup = None
+        self.suggest_listbox = None
+        self.suggestions = []
+
+    def move_suggestion_selection(self, delta):
+        size = self.suggest_listbox.size()
+        if size == 0:
+            return
+        current = self.suggest_listbox.curselection()
+        idx = (current[0] + delta) % size if current else 0
+        self.suggest_listbox.selection_clear(0, "end")
+        self.suggest_listbox.selection_set(idx)
+        self.suggest_listbox.activate(idx)
+        self.suggest_listbox.see(idx)
+
+    def accept_suggestion(self):
+        if not self.suggestions_visible():
+            return False
+        selection = self.suggest_listbox.curselection()
+        idx = selection[0] if selection else 0
+        if idx >= len(self.suggestions):
+            return False
+        cmd = self.suggestions[idx][0]
+        self.entry.delete(0, "end")
+        self.entry.insert(0, f"/{cmd} ")
+        self.entry.icursor("end")
+        self.hide_suggestions()
+        return True
+
+    def on_entry_down(self, event):
+        if not self.suggestions_visible():
+            return None
+        self.move_suggestion_selection(1)
+        return "break"
+
+    def on_entry_up(self, event):
+        if not self.suggestions_visible():
+            return None
+        self.move_suggestion_selection(-1)
+        return "break"
+
+    def on_entry_tab(self, event):
+        if self.accept_suggestion():
+            return "break"
+        return None
+
+    def on_entry_escape(self, event):
+        if self.suggestions_visible():
+            self.hide_suggestions()
+            return "break"
+        return None
+
+    def on_entry_return(self, event=None):
+        if self.accept_suggestion():
+            return "break"
+        self.send_entry()
+        return "break"
+
+    def on_suggest_click(self, event):
+        idx = self.suggest_listbox.nearest(event.y)
+        self.suggest_listbox.selection_clear(0, "end")
+        self.suggest_listbox.selection_set(idx)
+        self.accept_suggestion()
+        self.entry.focus()
+
     # Envoi vers le serveur
     def send_command(self, cmd, args):
         send_json(self.sock, {"type": "command", "cmd": cmd, "args": args})
@@ -364,6 +523,7 @@ class ChatClient:
     def send_entry(self):
         text = self.entry.get().strip()
         self.entry.delete(0, "end")
+        self.hide_suggestions()
         if not text:
             return
 

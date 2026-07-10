@@ -2,7 +2,7 @@
 
 import time
 
-# Couleurs (fond sombre + rouge vif, façon habillage Valorant)
+# Couleurs
 BG = "#0F1923"
 BG_PANEL = "#161F2B"
 BG_INPUT = "#1F2933"
