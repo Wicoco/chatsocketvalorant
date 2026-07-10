@@ -20,7 +20,7 @@ FONT_HEADER = ("Segoe UI", 12, "bold")
 FONT_TEXT = ("Consolas", 10)
 FONT_BOLD = ("Consolas", 10, "bold")
 
-TITLE = "VALORANT — TACTICAL CHAT PROTOCOL"
+TITLE = "VALORANT - TACTICAL CHAT PROTOCOL"
 
 ROLE_COLORS = {"admin": GOLD, "moderator": CYAN, "user": WHITE}
 ROLE_LABELS = {"admin": "ADMINISTRATEUR", "moderator": "MODÉRATEUR", "user": "AGENT"}

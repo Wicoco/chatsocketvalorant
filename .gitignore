@@ -1,0 +1,7 @@
+# Données générées à l'exécution
+user_data.json
+*.log
+
+# Python
+__pycache__/
+*.pyc

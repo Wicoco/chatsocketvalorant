@@ -1,14 +1,14 @@
-# Chat Textuel Sockets — Interface Valorant
+# Chat Textuel Sockets - Interface Valorant
 
 Chat en réseau (sockets TCP) en Python, avec un client graphique Tkinter à l'habillage
 inspiré de Valorant.
 
 ## Fichiers
 
-- `server.py` — serveur multi-clients (threading), salons, rôles, modération.
-- `client.py` — client graphique Tkinter (thème Valorant).
-- `protocol.py` — framing des messages JSON partagé client/serveur.
-- `theme.py` — palette de couleurs et polices du thème Valorant.
+- `server.py` : serveur multi-clients (threading), salons, rôles, modération.
+- `client.py` : client graphique Tkinter (thème Valorant).
+- `protocol.py` : framing des messages JSON partagé client/serveur.
+- `theme.py` : palette de couleurs et polices du thème Valorant.
 
 Aucune dépendance externe : bibliothèque standard Python 3 uniquement (Tkinter est inclus
 avec Python sur Windows/macOS ; sous Linux, installer le paquet `python3-tk` si besoin).
