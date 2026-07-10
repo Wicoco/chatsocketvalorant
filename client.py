@@ -54,6 +54,7 @@ class ChatClient:
         self.room = "general"
         self.connected = False
         self.members = {}  # pseudo -> rôle, tenu à jour via /who, join, leave
+        self.rooms = {}    # nom du salon -> nombre de membres, tenu à jour via /rooms
 
         self.root = tk.Tk()
         self.root.title(theme.TITLE)
@@ -320,6 +321,7 @@ class ChatClient:
         elif mtype == "rooms":
             rooms_str = ", ".join(f"{name} ({count})" for name, count in msg["rooms"].items())
             self.append_system(f"Salons : {rooms_str}")
+            self.rooms = dict(msg["rooms"])
 
         elif mtype == "who":
             users_str = ", ".join(f"{u['username']} [{theme.role_label(u['role'])}]" for u in msg["users"])
@@ -330,6 +332,7 @@ class ChatClient:
             self.room = msg["room"]
             self.room_label.config(text=self.room)
             self.send_command("who", [])
+            self.send_command("rooms", [])
 
         elif mtype == "role_changed":
             self.role = msg["role"]
@@ -342,6 +345,7 @@ class ChatClient:
             self.update_status()
             self.append_success(f"Connecté en tant que {msg['username']} ({theme.role_label(msg['role'])})")
             self.send_command("who", [])
+            self.send_command("rooms", [])
 
         elif mtype == "kicked":
             self.append_error(f"Expulsé : {msg['reason']}")
@@ -436,11 +440,81 @@ class ChatClient:
         dialog.wait_window()
         return result["value"]
 
+    # Sélection d'un salon parmi ceux existants, avec possibilité d'en créer un nouveau
+    def pick_room(self, title, prompt):
+        candidates = sorted(name for name in self.rooms if name != self.room)
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.configure(bg=theme.BG)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text=prompt, fg=theme.WHITE, bg=theme.BG).pack(padx=10, pady=(10, 5))
+
+        listbox = tk.Listbox(dialog, bg=theme.BG_INPUT, fg=theme.WHITE, selectbackground=theme.RED,
+                              activestyle="none", exportselection=False,
+                              height=min(8, len(candidates)) if candidates else 1, width=30)
+        for name in candidates:
+            listbox.insert("end", f"{name} ({self.rooms[name]})")
+        if not candidates:
+            listbox.insert("end", "Aucun autre salon pour le moment")
+            listbox.config(state="disabled")
+        listbox.pack(padx=10, pady=5, fill="both", expand=True)
+        if candidates:
+            listbox.selection_set(0)
+
+        tk.Label(dialog, text="Ou créer / rejoindre un nouveau salon :", fg=theme.GRAY, bg=theme.BG).pack(
+            anchor="w", padx=10, pady=(5, 0))
+        entry = tk.Entry(dialog, bg=theme.BG_INPUT, fg=theme.WHITE, insertbackground=theme.WHITE, width=30)
+        entry.pack(padx=10, pady=(0, 5))
+
+        def fill_entry(event=None):
+            selection = listbox.curselection()
+            if selection and candidates:
+                entry.delete(0, "end")
+                entry.insert(0, candidates[selection[0]])
+
+        listbox.bind("<<ListboxSelect>>", fill_entry)
+        entry.focus()
+
+        result = {"value": None}
+
+        def confirm(event=None):
+            new_name = entry.get().strip()
+            if new_name:
+                result["value"] = new_name
+            else:
+                selection = listbox.curselection()
+                if selection and candidates:
+                    result["value"] = candidates[selection[0]]
+            dialog.destroy()
+
+        def cancel(event=None):
+            dialog.destroy()
+
+        listbox.bind("<Double-Button-1>", confirm)
+        dialog.bind("<Return>", confirm)
+        dialog.bind("<Escape>", cancel)
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+
+        btn_frame = tk.Frame(dialog, bg=theme.BG)
+        btn_frame.pack(fill="x", padx=10, pady=(0, 10))
+        tk.Button(btn_frame, text="OK", command=confirm, bg=theme.RED, fg=theme.WHITE,
+                  font=theme.FONT_BOLD, relief="flat").pack(side="right", padx=(6, 0))
+        tk.Button(btn_frame, text="Annuler", command=cancel, bg=theme.BG_INPUT, fg=theme.WHITE,
+                  font=theme.FONT_TEXT, relief="flat").pack(side="right")
+
+        dialog.wait_window()
+        return result["value"]
+
     # Actions de la barre latérale (ouvrent une boîte de dialogue puis envoient la commande)
     def action_join_room(self):
-        name = simpledialog.askstring("Rejoindre un salon", "Nom du salon :", parent=self.root)
-        if name and name.strip():
-            self.send_command("join", [name.strip()])
+        self.send_command("rooms", [])
+        name = self.pick_room("Rejoindre un salon", "Salons disponibles :")
+        if name:
+            self.send_command("join", [name])
 
     def action_leave_room(self):
         self.send_command("leave", [])
