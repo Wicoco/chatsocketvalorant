@@ -53,6 +53,7 @@ class ChatClient:
         self.role = "user"
         self.room = "general"
         self.connected = False
+        self.members = {}  # pseudo -> rôle, tenu à jour via /who, join, leave
 
         self.root = tk.Tk()
         self.root.title(theme.TITLE)
@@ -303,9 +304,11 @@ class ChatClient:
 
         elif mtype == "join":
             self.append_line(f">> {msg['username']} a rejoint la partie.", "join")
+            self.members[msg["username"]] = msg.get("role", "user")
 
         elif mtype == "leave":
             self.append_line(f"<< {msg['username']} a quitté la partie.", "leave")
+            self.members.pop(msg["username"], None)
 
         elif mtype == "pong":
             rtt_ms = int((time.time() - msg["ts"]) * 1000)
@@ -321,10 +324,12 @@ class ChatClient:
         elif mtype == "who":
             users_str = ", ".join(f"{u['username']} [{theme.role_label(u['role'])}]" for u in msg["users"])
             self.append_system(f"Membres de #{msg['room']} : {users_str}")
+            self.members = {u["username"]: u["role"] for u in msg["users"]}
 
         elif mtype == "room_changed":
             self.room = msg["room"]
             self.room_label.config(text=self.room)
+            self.send_command("who", [])
 
         elif mtype == "role_changed":
             self.role = msg["role"]
@@ -336,6 +341,7 @@ class ChatClient:
             self.room = msg["room"]
             self.update_status()
             self.append_success(f"Connecté en tant que {msg['username']} ({theme.role_label(msg['role'])})")
+            self.send_command("who", [])
 
         elif mtype == "kicked":
             self.append_error(f"Expulsé : {msg['reason']}")
@@ -379,6 +385,57 @@ class ChatClient:
 
         send_json(self.sock, {"type": "chat", "text": text})
 
+    # Sélection d'un pseudo parmi les membres présents (plutôt qu'une saisie libre)
+    def pick_username(self, title, prompt, exclude_self=True):
+        candidates = sorted(name for name in self.members if not (exclude_self and name == self.username))
+        if not candidates:
+            messagebox.showinfo(title, "Aucun membre disponible pour le moment.", parent=self.root)
+            return None
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.configure(bg=theme.BG)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text=prompt, fg=theme.WHITE, bg=theme.BG).pack(padx=10, pady=(10, 5))
+
+        listbox = tk.Listbox(dialog, bg=theme.BG_INPUT, fg=theme.WHITE, selectbackground=theme.RED,
+                              activestyle="none", exportselection=False,
+                              height=min(8, len(candidates)), width=30)
+        for name in candidates:
+            listbox.insert("end", f"{name} [{theme.role_label(self.members.get(name, 'user'))}]")
+        listbox.pack(padx=10, pady=5, fill="both", expand=True)
+        listbox.selection_set(0)
+        listbox.focus()
+
+        result = {"value": None}
+
+        def confirm(event=None):
+            selection = listbox.curselection()
+            if selection:
+                result["value"] = candidates[selection[0]]
+            dialog.destroy()
+
+        def cancel(event=None):
+            dialog.destroy()
+
+        listbox.bind("<Double-Button-1>", confirm)
+        dialog.bind("<Return>", confirm)
+        dialog.bind("<Escape>", cancel)
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+
+        btn_frame = tk.Frame(dialog, bg=theme.BG)
+        btn_frame.pack(fill="x", padx=10, pady=(0, 10))
+        tk.Button(btn_frame, text="OK", command=confirm, bg=theme.RED, fg=theme.WHITE,
+                  font=theme.FONT_BOLD, relief="flat").pack(side="right", padx=(6, 0))
+        tk.Button(btn_frame, text="Annuler", command=cancel, bg=theme.BG_INPUT, fg=theme.WHITE,
+                  font=theme.FONT_TEXT, relief="flat").pack(side="right")
+
+        dialog.wait_window()
+        return result["value"]
+
     # Actions de la barre latérale (ouvrent une boîte de dialogue puis envoient la commande)
     def action_join_room(self):
         name = simpledialog.askstring("Rejoindre un salon", "Nom du salon :", parent=self.root)
@@ -400,12 +457,12 @@ class ChatClient:
             self.send_command("nickname", [name.strip()])
 
     def action_private_message(self):
-        target = simpledialog.askstring("Message privé", "Pseudo du destinataire :", parent=self.root)
+        target = self.pick_username("Message privé", "Destinataire :")
         if not target:
             return
         text = simpledialog.askstring("Message privé", f"Message pour {target} :", parent=self.root)
         if text and text.strip():
-            self.send_command("message", [target.strip(), text.strip()])
+            self.send_command("message", [target, text.strip()])
 
     def action_time(self):
         self.send_command("time", [])
@@ -422,32 +479,32 @@ class ChatClient:
         messagebox.showinfo("Commandes disponibles", HELP_TEXT, parent=self.root)
 
     def action_kick(self):
-        target = simpledialog.askstring("Expulser", "Pseudo à expulser :", parent=self.root)
-        if target and target.strip():
-            self.send_command("kick", [target.strip()])
+        target = self.pick_username("Expulser", "Membre à expulser :")
+        if target:
+            self.send_command("kick", [target])
 
     def action_ban(self):
-        target = simpledialog.askstring("Bannir", "Pseudo à bannir :", parent=self.root)
-        if target and target.strip():
-            self.send_command("ban", [target.strip()])
+        target = self.pick_username("Bannir", "Membre à bannir :")
+        if target:
+            self.send_command("ban", [target])
 
     def action_mute(self):
-        target = simpledialog.askstring("Rendre muet", "Pseudo à museler :", parent=self.root)
-        if not target or not target.strip():
+        target = self.pick_username("Rendre muet", "Membre à museler :")
+        if not target:
             return
         duration = simpledialog.askstring("Rendre muet", "Durée en secondes (défaut 60) :", parent=self.root)
-        args = [target.strip()] + ([duration.strip()] if duration and duration.strip() else [])
+        args = [target] + ([duration.strip()] if duration and duration.strip() else [])
         self.send_command("mute", args)
 
     def action_unmute(self):
-        target = simpledialog.askstring("Réautoriser la parole", "Pseudo à démuter :", parent=self.root)
-        if target and target.strip():
-            self.send_command("unmute", [target.strip()])
+        target = self.pick_username("Réautoriser la parole", "Membre à démuter :")
+        if target:
+            self.send_command("unmute", [target])
 
     def action_setrole(self, cmd):
-        target = simpledialog.askstring(cmd.replace("_", " ").capitalize(), "Pseudo concerné :", parent=self.root)
-        if target and target.strip():
-            self.send_command(cmd, [target.strip()])
+        target = self.pick_username(cmd.replace("_", " ").capitalize(), "Membre concerné :")
+        if target:
+            self.send_command(cmd, [target])
 
     def quit_app(self):
         self.connected = False
