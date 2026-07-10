@@ -143,9 +143,9 @@ def resolve_target(conn, info, username):
     return target_conn, target_info
 
 
-def cmd_nick(conn, info, args):
+def cmd_nickname(conn, info, args):
     if not args:
-        error(conn, "Usage: /nick <nouveau_pseudo>")
+        error(conn, "Usage: /nickname <nouveau_pseudo>")
         return
     new_name = args[0]
     if not is_valid_username(new_name):
@@ -170,9 +170,9 @@ def cmd_nick(conn, info, args):
     broadcast(info["room"], {"type": "system", "text": f"{old_name} est maintenant {new_name}"}, exclude=conn)
 
 
-def cmd_msg(conn, info, args):
+def cmd_message(conn, info, args):
     if len(args) < 2:
-        error(conn, "Usage: /msg <pseudo> <message>")
+        error(conn, "Usage: /message <pseudo> <message>")
         return
     target_name, text = args[0], " ".join(args[1:])
     text = sanitize_text(text)
@@ -221,6 +221,7 @@ def cmd_join(conn, info, args):
         info["room"] = room_name
     broadcast(old_room, {"type": "system", "text": f"{info['username']} a quitté le salon."})
     broadcast(room_name, {"type": "system", "text": f"{info['username']} a rejoint le salon."}, exclude=conn)
+    safe_send(conn, {"type": "room_changed", "room": room_name})
     system(conn, f"Vous avez rejoint le salon '{room_name}'.")
 
 
@@ -241,8 +242,8 @@ def cmd_kick(conn, info, args):
     target_conn, target_info = resolve_target(conn, info, args[0])
     if target_conn is None:
         return
-    safe_send(target_conn, {"type": "kicked", "reason": f"Kick par {info['username']}"})
-    system(conn, f"{target_info['username']} a été kick.")
+    safe_send(target_conn, {"type": "kicked", "reason": f"Expulsé par {info['username']}"})
+    system(conn, f"{target_info['username']} a été expulsé.")
     try:
         target_conn.shutdown(socket.SHUT_RDWR)
     except OSError:
@@ -261,7 +262,7 @@ def cmd_ban(conn, info, args):
     if target_conn is None:
         return
     set_user_banned(target_info["username"], True)
-    safe_send(target_conn, {"type": "banned", "reason": f"Ban par {info['username']}"})
+    safe_send(target_conn, {"type": "banned", "reason": f"Banni par {info['username']}"})
     system(conn, f"{target_info['username']} a été banni.")
     try:
         target_conn.shutdown(socket.SHUT_RDWR)
@@ -285,8 +286,8 @@ def cmd_mute(conn, info, args):
         return
     with clients_lock:
         target_info["muted_until"] = time.time() + duration
-    system(conn, f"{target_info['username']} muted pendant {duration}s.")
-    system(target_conn, f"Vous êtes muted pendant {duration}s.")
+    system(conn, f"{target_info['username']} rendu muet pendant {duration}s.")
+    system(target_conn, f"Vous êtes muet pendant {duration}s.")
 
 
 def cmd_unmute(conn, info, args):
@@ -301,8 +302,8 @@ def cmd_unmute(conn, info, args):
         return
     with clients_lock:
         target_info["muted_until"] = None
-    system(conn, f"{target_info['username']} démuté.")
-    system(target_conn, "Vous n'êtes plus muted.")
+    system(conn, f"{target_info['username']} peut de nouveau parler.")
+    system(target_conn, "Vous pouvez de nouveau parler.")
 
 
 def cmd_setrole(conn, info, args, role, label):
@@ -320,11 +321,12 @@ def cmd_setrole(conn, info, args, role, label):
     set_user_role(target_info["username"], role)
     system(conn, f"{target_info['username']} est maintenant {role}.")
     system(target_conn, f"Vous êtes maintenant {role}.")
+    safe_send(target_conn, {"type": "role_changed", "role": role})
 
 
 COMMANDS = {
-    "nick": cmd_nick,
-    "msg": cmd_msg,
+    "nickname": cmd_nickname,
+    "message": cmd_message,
     "time": cmd_time,
     "rooms": cmd_rooms,
     "who": cmd_who,
@@ -334,10 +336,10 @@ COMMANDS = {
     "ban": cmd_ban,
     "mute": cmd_mute,
     "unmute": cmd_unmute,
-    "setmodo": lambda c, i, a: cmd_setrole(c, i, a, "moderator", "setmodo"),
-    "setadmin": lambda c, i, a: cmd_setrole(c, i, a, "admin", "setadmin"),
-    "remmodo": lambda c, i, a: cmd_setrole(c, i, a, "user", "remmodo"),
-    "remadmin": lambda c, i, a: cmd_setrole(c, i, a, "user", "remadmin"),
+    "set_moderator": lambda c, i, a: cmd_setrole(c, i, a, "moderator", "set_moderator"),
+    "set_administrator": lambda c, i, a: cmd_setrole(c, i, a, "admin", "set_administrator"),
+    "remove_moderator": lambda c, i, a: cmd_setrole(c, i, a, "user", "remove_moderator"),
+    "remove_administrator": lambda c, i, a: cmd_setrole(c, i, a, "user", "remove_administrator"),
 }
 
 
